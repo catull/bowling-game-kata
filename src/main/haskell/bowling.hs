@@ -1,55 +1,64 @@
-{-# LANGUAGE TemplateHaskell #-}
 
 import Data.List (intersperse)
-import Test.QuickCheck
 
-game_gutter :: [ Int ]
-game_gutter = replicate 12 0
+import Test.HUnit.Base (Counts, Test, test, (~:), (~=?))
+import Test.HUnit.Text (runTestTT)
 
-game_90 :: [ Int ]
-game_90 = intersperse 0 $ replicate 10 9
+-- Pins knocked down
+type Pins = [Int]
 
-game_92 :: [ Int ]
-game_92 = [ 9, 0, 9, 0, 9, 0, 9, 0, 9, 0, 9, 0, 9, 0, 9, 10, 9, 1 ]
+-- Number of points scored
+type Score = Int
 
-game_129 :: [ Int ]
-game_129 = [  4,  5,
-          5,  3,
-         10,
-          6,  4,
-          0, 10,
-          7,  1,
-          9,  0,
-          8,  1,
-          3,  6 ] ++ [ 10, 10, 10 ]
-
-gamePerfect :: [ Int ]
-gamePerfect = replicate 12 10
-
-score :: [ Int ] -> Int -> Int
-score [ x ]                  _ = x
-score [ x, y ]               _ = x + y
-score (x : y : z : xs)   frame
-     | 10 == x,     10 > frame = 10 + y + z + score (y : z : xs) f
-     | 10 == x + y, 10 > frame =  x + y + z + score     (z : xs) f
-     | otherwise               =  x + y     + score     (z : xs) f
+scoreGame :: Pins -> Int -> Score
+scoreGame [ x ]                  _ = x
+scoreGame [ x, y ]               _ = x + y
+scoreGame (x : y : z : xs) frame
+     | 10 == x,     10 > frame = 10 + y + z + scoreGame (y : z : xs) n
+     | 10 == x + y, 10 > frame = 10     + z + scoreGame     (z : xs) n
+     | otherwise               =  x + y     + scoreGame     (z : xs) n
   where
-     f = frame + 1
+     n = frame + 1
 
-prop_game_gutter :: Bool
-prop_game_gutter = 0 == score game_gutter 1
+perfect :: Int -> Pins
+perfect n = replicate n 10
 
-prop_game_90 :: Bool
-prop_game_90 = 90 == score game_90 1
+gutter :: Int -> Pins
+gutter n = replicate n 0
 
-prop_game_92 :: Bool
-prop_game_92 = 92 == score game_92 1
+testData :: [ (Score, Pins) ]
+testData = [
+       (300, perfect 12), -- perfect game, 12 Strikes
+       (290,  9 : 1 : perfect 11),
+       (279,  8 : 1 : perfect 11),
+       (269,  8 : 1 : 9 : 1 : perfect 10),
+       (258,  7 : 2 : 6 : 3 : perfect 10),
+       (290, perfect 9  ++  [10, 10,  0]),
+       (285, perfect 9  ++  [10,  5,  5]),
+       (280, perfect 9  ++  [10,  0, 10]),
+       (270, perfect 9  ++  [10,  0,  0]),
+       (274, perfect 9  ++  [ 9,  1,  5]),
+       (267, perfect 9  ++  [ 9,  0]),
+       (210, (concat $ replicate 5 [ 9, 1, 10 ]) ++ [ 10, 10 ]),
+       (200, [ 10, 8, 2, 10, 9, 1, 10, 7, 3, 10, 6, 4, 10, 1, 9, 10 ]), -- Dutch
+       (190, intersperse 1 $ replicate 11 9),
+       (150, replicate 21 5),
+       (129, [ 4, 5, 5, 3, 10, 6, 4, 0, 10, 7, 1, 9, 0, 8, 1, 3, 6, 10, 10, 10 ]),
+       (101, [ 9, 0, 9, 0, 9, 0, 9, 0, 9, 0, 9, 0, 9, 0, 9, 0, 9, 10, 9, 1 ]),
+       ( 90, (intersperse 0 $ replicate 10 9) ++ [ 0 ]),
+       ( 20, gutter 16  ++  [10,  2,  3]),
+       ( 15, gutter 16  ++  [ 0,  0,  10,  2,  3]),
+       (  0, gutter 20)         -- Missed all
+    ]
 
-prop_game_perfect :: Bool
-prop_game_perfect = 300 == score gamePerfect 1
+-- Construct a unit test asserting that
+-- we calculate the expected score
+testFromData :: (Score, Pins) -> Test
+testFromData (score, pins) = ("Scoring "  ++  show pins) ~: score ~=? scoreGame pins 1
 
-return []
-runTests = $quickCheckAll
+-- Build a list of tests and run it
+tests :: Test
+tests = test (map testFromData testData)
 
-main :: IO Bool
-main = runTests
+main :: IO Counts
+main = runTestTT tests
